@@ -12,7 +12,7 @@
 > 4. More options for impersonation Akamai http/2 fingerprints, especially for Safari.
 > 5. Upgrade to more recent version of curl, 8.7.1 as of April, 2024.
 > 6. Ability to change extension orders and enable/disable TLS grease.
-> 7. (In progress) Single binary to support both Webkit-based and Gecko-based browsers, i.e. Chrome and Firefox.
+> 7. Single binary to support both Webkit-based and Gecko-based browsers, i.e. Chrome, Safari and Firefox.
 
 A special build of [curl](https://github.com/curl/curl) that can impersonate the four major browsers: Chrome, Edge, Safari and Firefox(In progress). `curl-impersonate` is able to perform TLS and HTTP handshakes that are identical to that of a real browser.
 
@@ -67,6 +67,7 @@ The following browsers can be impersonated.
 | ![Safari](https://github.com/alrra/browser-logos/blob/main/src/safari/safari_24x24.png "Safari") | 17.2 | unclear | iOS 17.2 | `safari17_2_ios` | [curl_safari17_2_ios](chrome/curl_safari17_2_ios) |
 | ![Safari](https://github.com/alrra/browser-logos/blob/main/src/safari/safari_24x24.png "Safari") | 18.0 | unclear | MacOS Sequoia | `safari18_0` | [curl_safari18_0](chrome/curl_safari18_0) |
 | ![Safari](https://github.com/alrra/browser-logos/blob/main/src/safari/safari_24x24.png "Safari") | 18.0 | unclear | iOS 18.0 | `safari18_0_ios` | [curl_safari18_0_ios](chrome/curl_safari18_0_ios) |
+| ![Safari](https://github.com/alrra/browser-logos/blob/main/src/firefox/firefox_24x24.png "Firefox") | 133.0 | unclear | macOS Sonoma | `firefox133` | [curl_firefox133](chrome/curl_firefox133) |
 
 <small>
 Notes:
