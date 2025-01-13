@@ -2,14 +2,17 @@ name: Build for windows
 on:
   push:
     branches:
-      - main
-      - feature/*
-      - bugfix/*
+      - disabled  # only temporary
+      # - main
+      # - feature/*
+      # - bugfix/*
     tags:
-      - "v*.*.*"
+      - disabled
+      # - "v*.*.*"
   pull_request:
     branches:
-      - main
+      - disabled
+      # - main
 
 permissions:
   contents: write
