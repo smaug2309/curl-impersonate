@@ -1521,7 +1521,7 @@ index 80e183480..8ee390b7e 100644
   * Store nghttp2 version info in this buffer.
 diff --git a/lib/impersonate.c b/lib/impersonate.c
 new file mode 100644
-index 000000000..c71d7bbcf
+index 000000000..9b9f11cd0
 --- /dev/null
 +++ b/lib/impersonate.c
 @@ -0,0 +1,1227 @@
@@ -2707,7 +2707,7 @@ index 000000000..c71d7bbcf
 +    .tls_grease = true
 +  },
 +  {
-+    .target = "firefox120", /* not working */
++    .target = "firefox133",
 +    .httpversion = CURL_HTTP_VERSION_2_0,
 +    .ssl_version = CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_DEFAULT,
 +    .ciphers =
@@ -2729,23 +2729,23 @@ index 000000000..c71d7bbcf
 +      "TLS_RSA_WITH_AES_128_CBC_SHA,"
 +      "TLS_RSA_WITH_AES_256_CBC_SHA",
 +    .http_headers = {
-+      "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
-+      "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
++      "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:134.0) Gecko/20100101 Firefox/134.0",
++      "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 +      "Accept-Language: en-US,en;q=0.5",
-+      "Accept-Encoding: gzip, deflate, br",
++      "Accept-Encoding: gzip, deflate, br, zstd",
 +      "Upgrade-Insecure-Requests: 1",
 +      "Sec-Fetch-Dest: document",
 +      "Sec-Fetch-Mode: navigate",
 +      "Sec-Fetch-Site: none",
 +      "Sec-Fetch-User: ?1",
++      "Priority: u=0, i",
 +      "Te: trailers"
 +    },
-+    .http2_settings = "1:65536;4:131072;5:16384",
++    .http2_settings = "1:65536;2:0;4:131072;5:16384",
 +    .http2_window_update = 12517377,
 +    .http2_pseudo_headers_order = "mpas",
-+    .http2_streams = "3:0:0:201,5:0:0:101,7:0:0:1,9:0:7:1,11:0:3:1,13:0:0:241",
 +    .tls_extension_order = NULL,
-+    .tls_grease = true
++    .tls_grease = false
 +  },
 +  {
 +    /* Last one must be NULL. */
