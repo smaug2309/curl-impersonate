@@ -12,8 +12,25 @@ index 000000000..7053c8cde
 +
 +git diff $BASE_COMMIT > boringssl.patch
 +mv boringssl.patch ../curl-impersonate/chrome/patches/boringssl.patch
+diff --git a/include/openssl/nid.h b/include/openssl/nid.h
+index 02d78c648..4b67d1df2 100644
+--- a/include/openssl/nid.h
++++ b/include/openssl/nid.h
+@@ -4258,6 +4258,12 @@ extern "C" {
+ #define SN_X25519MLKEM768 "X25519MLKEM768"
+ #define NID_X25519MLKEM768 965
+ 
++#define SN_ffdhe2048 "ffdhe2048"
++#define NID_ffdhe2048 966
++
++#define SN_ffdhe3072 "ffdhe3072"
++#define NID_ffdhe3072 967
++
+ 
+ #if defined(__cplusplus)
+ } /* extern C */
 diff --git a/include/openssl/ssl.h b/include/openssl/ssl.h
-index 7f733ac93..d7ed1aba1 100644
+index 7f733ac93..b16ac6ff0 100644
 --- a/include/openssl/ssl.h
 +++ b/include/openssl/ssl.h
 @@ -1767,6 +1767,12 @@ OPENSSL_EXPORT int SSL_CTX_set_strict_cipher_list(SSL_CTX *ctx,
@@ -65,6 +82,15 @@ index 7f733ac93..d7ed1aba1 100644
  #define SSL_set_app_data(s, arg) (SSL_set_ex_data(s, 0, (char *)(arg)))
  #define SSL_get_app_data(s) (SSL_get_ex_data(s, 0))
  #define SSL_SESSION_set_app_data(s, a) \
+@@ -5570,6 +5598,8 @@ OPENSSL_EXPORT int SSL_CTX_set_tlsext_status_arg(SSL_CTX *ctx, void *arg);
+ #define SSL_CURVE_SECP521R1 SSL_GROUP_SECP521R1
+ #define SSL_CURVE_X25519 SSL_GROUP_X25519
+ #define SSL_CURVE_X25519_KYBER768_DRAFT00 SSL_GROUP_X25519_KYBER768_DRAFT00
++#define SSL_CURVE_DHE2048 256
++#define SSL_CURVE_DHE3072 257
+ 
+ // SSL_get_curve_id calls |SSL_get_group_id|.
+ OPENSSL_EXPORT uint16_t SSL_get_curve_id(const SSL *ssl);
 diff --git a/include/openssl/tls1.h b/include/openssl/tls1.h
 index 60301885a..4440c3bcb 100644
 --- a/include/openssl/tls1.h
@@ -759,6 +785,20 @@ index 97e69ff90..dc3ca1526 100644
                      OPENSSL_ARRAY_SIZE(kCiphers),
                  "Not all ciphers are included in the cipher order");
  
+diff --git a/ssl/ssl_key_share.cc b/ssl/ssl_key_share.cc
+index 88144b060..96c78dc35 100644
+--- a/ssl/ssl_key_share.cc
++++ b/ssl/ssl_key_share.cc
+@@ -382,6 +382,9 @@ constexpr NamedGroup kNamedGroups[] = {
+     {NID_X25519Kyber768Draft00, SSL_GROUP_X25519_KYBER768_DRAFT00,
+      "X25519Kyber768Draft00", ""},
+     {NID_X25519MLKEM768, SSL_GROUP_X25519_MLKEM768, "X25519MLKEM768", ""},
++    // curl-impersonate: This is fake group id
++    {NID_ffdhe2048, SSL_CURVE_DHE2048, "dhe2048", "ffdhe2048"},
++    {NID_ffdhe3072, SSL_CURVE_DHE3072, "dhe3072", "ffdhe3072"},
+ };
+ 
+ }  // namespace
 diff --git a/ssl/ssl_lib.cc b/ssl/ssl_lib.cc
 index f0b3872e9..bd6f869e6 100644
 --- a/ssl/ssl_lib.cc
