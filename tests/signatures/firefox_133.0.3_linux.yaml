@@ -65,7 +65,7 @@ signature:
       type: extended_master_secret
     - length: 1
       type: renegotiation_info
-    - length: 14
+    - length: 16
       supported_groups:
       - 4588
       - 29

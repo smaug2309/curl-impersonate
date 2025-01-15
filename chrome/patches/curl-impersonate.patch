@@ -1536,10 +1536,10 @@ index 80e183480..8ee390b7e 100644
   * Store nghttp2 version info in this buffer.
 diff --git a/lib/impersonate.c b/lib/impersonate.c
 new file mode 100644
-index 000000000..6ff5efcd7
+index 000000000..57890b12a
 --- /dev/null
 +++ b/lib/impersonate.c
-@@ -0,0 +1,1233 @@
+@@ -0,0 +1,1234 @@
 +#include "curl_setup.h"
 +
 +#include <curl/curl.h>
@@ -2756,6 +2756,7 @@ index 000000000..6ff5efcd7
 +      "Priority: u=0, i",
 +      "Te: trailers"
 +    },
++    .curves = "X25519MLKEM768:X25519:P-256:P-384:P-521:ffdhe2048:ffdhe3072",
 +    .alpn = true,
 +    .http2_settings = "1:65536;2:0;4:131072;5:16384",
 +    .http2_window_update = 12517377,
