@@ -1536,10 +1536,10 @@ index 80e183480..8ee390b7e 100644
   * Store nghttp2 version info in this buffer.
 diff --git a/lib/impersonate.c b/lib/impersonate.c
 new file mode 100644
-index 000000000..1fd766502
+index 000000000..6ff5efcd7
 --- /dev/null
 +++ b/lib/impersonate.c
-@@ -0,0 +1,1230 @@
+@@ -0,0 +1,1233 @@
 +#include "curl_setup.h"
 +
 +#include <curl/curl.h>
@@ -2756,10 +2756,13 @@ index 000000000..1fd766502
 +      "Priority: u=0, i",
 +      "Te: trailers"
 +    },
++    .alpn = true,
 +    .http2_settings = "1:65536;2:0;4:131072;5:16384",
 +    .http2_window_update = 12517377,
 +    .http2_pseudo_headers_order = "mpas",
 +    .cert_compression = "zlib,brotli,zstd",
++    .ech = "GREASE",
++    .tls_session_ticket = true,
 +    .tls_extension_order = "0-23-65281-10-11-35-16-5-34-51-43-13-45-28-27-65037",
 +    .tls_delegated_credentials = "ecdsa_secp256r1_sha256:ecdsa_secp384r1_sha384:ecdsa_secp521r1_sha512:ecdsa_sha1",
 +    .tls_record_size_limit = 4001,

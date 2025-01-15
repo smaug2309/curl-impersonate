@@ -1,6 +1,6 @@
 # Using libcurl-impersonate
 
-Documentation for using libcurl-impersonate is currently on the [main page](https://github.com/yifeikong/curl-impersonate#libcurl-impersonate)
+Documentation for using libcurl-impersonate is currently on the [main page](https://github.com/lexiforest/curl-impersonate#libcurl-impersonate)
 
 `libcurl-impersonate.so` is libcurl compiled with the same changes as the command line `curl-impersonate`.
 
