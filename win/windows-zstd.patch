@@ -1,0 +1,13 @@
+diff --git a/lib/common/cpu.h b/lib/common/cpu.h
+index 0e684d9a..f8c1ecce 100644
+--- a/lib/common/cpu.h
++++ b/lib/common/cpu.h
+@@ -35,7 +35,7 @@ MEM_STATIC ZSTD_cpuid_t ZSTD_cpuid(void) {
+     U32 f7b = 0;
+     U32 f7c = 0;
+ #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+-#if !defined(__clang__)
++#if 1
+     int reg[4];
+     __cpuid((int*)reg, 0);
+     {

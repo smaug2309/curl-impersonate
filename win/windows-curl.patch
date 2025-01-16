@@ -1,0 +1,15 @@
+diff --git a/lib/curl_setup.h b/lib/curl_setup.h
+index 286acc371..0ea248097 100644
+--- a/lib/curl_setup.h
++++ b/lib/curl_setup.h
+@@ -687,6 +687,10 @@
+ #error "No longer supported. Set CURLOPT_CAINFO at runtime instead."
+ #endif
+ 
++#if defined(USE_LIBSSH2)
++#undef USE_LIBSSH2
++#endif
++
+ #if defined(USE_LIBSSH2) || defined(USE_LIBSSH) || defined(USE_WOLFSSH)
+ #define USE_SSH
+ #endif
