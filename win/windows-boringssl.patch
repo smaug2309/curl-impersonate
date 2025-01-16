@@ -11,3 +11,57 @@ index 77c2e384f..40bac1947 100755
    else()
      if(EMSCRIPTEN)
        # emscripten's emcc/clang does not accept the "-ggdb" flag.
+diff --git a/crypto/rand_extra/windows.c b/crypto/rand_extra/windows.c
+index 77c2e384f..40bac1947 100644
+--- a/crypto/rand_extra/windows.c
++++ b/crypto/rand_extra/windows.c
+@@ -60,30 +60,45 @@ void CRYPTO_sysrand(uint8_t *out, size_t requested) {
+ 
+ // See: https://learn.microsoft.com/en-us/windows/win32/seccng/processprng
+-typedef BOOL (WINAPI *ProcessPrngFunction)(PBYTE pbData, SIZE_T cbData);
++typedef BOOL (WINAPI *ProcessPrngFunction)(PBYTE pbData, ULONG cbData);
+ static ProcessPrngFunction g_processprng_fn = NULL;
+ 
+ static void init_processprng(void) {
+   HMODULE hmod = LoadLibraryW(L"bcryptprimitives");
+   if (hmod == NULL) {
+     abort();
+   }
+   g_processprng_fn = (ProcessPrngFunction)GetProcAddress(hmod, "ProcessPrng");
+   if (g_processprng_fn == NULL) {
+-    abort();
++    hmod = LoadLibraryW(L"advapi32.dll");
++    if (hmod == NULL) {
++      abort();
++    }
++    g_processprng_fn = (ProcessPrngFunction)GetProcAddress(hmod, "SystemFunction036");
++    if (g_processprng_fn == NULL) {
++      abort();
++    }
+   }
+ }
+ 
+ void CRYPTO_init_sysrand(void) {
+   static CRYPTO_once_t once = CRYPTO_ONCE_INIT;
+   CRYPTO_once(&once, init_processprng);
+ }
+ 
+ void CRYPTO_sysrand(uint8_t *out, size_t requested) {
+   CRYPTO_init_sysrand();
+   // On non-UWP configurations, use ProcessPrng instead of BCryptGenRandom
+   // to avoid accessing resources that may be unavailable inside the
+   // Chromium sandbox. See https://crbug.com/74242
+-  if (!g_processprng_fn(out, requested)) {
+-    abort();
++  while (requested > 0) {
++    ULONG output_bytes_this_pass = ULONG_MAX;
++    if (requested < output_bytes_this_pass) {
++      output_bytes_this_pass = (ULONG)requested;
++    }
++    if (g_processprng_fn(out, output_bytes_this_pass) == FALSE) {
++      abort();
++    }
++    requested -= output_bytes_this_pass;
++    out += output_bytes_this_pass;
+   }
+ }
