@@ -3229,7 +3229,7 @@ index ce28f25bb..7d24e8171 100644
  
  #ifndef CURL_DISABLE_MIME
 diff --git a/lib/vtls/openssl.c b/lib/vtls/openssl.c
-index a3953f6c3..c70ecdaee 100644
+index a3953f6c3..ccfa7ff19 100644
 --- a/lib/vtls/openssl.c
 +++ b/lib/vtls/openssl.c
 @@ -79,9 +79,27 @@
@@ -3664,7 +3664,7 @@ index a3953f6c3..c70ecdaee 100644
 +  }
 +
 +  if(data->set.tls_key_shares_limit) {
-+    SSL_CTX_set_key_shares_limit(backend->ctx, data->set.tls_record_size_limit);
++    SSL_CTX_set_key_shares_limit(backend->ctx, data->set.tls_key_shares_limit);
 +  }
 +
 +  // curl-impersonate: Set key usage check
