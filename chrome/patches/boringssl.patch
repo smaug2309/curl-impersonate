@@ -30,7 +30,7 @@ index 02d78c648..4b67d1df2 100644
  #if defined(__cplusplus)
  } /* extern C */
 diff --git a/include/openssl/ssl.h b/include/openssl/ssl.h
-index 7f733ac93..b16ac6ff0 100644
+index 7f733ac93..8c9598070 100644
 --- a/include/openssl/ssl.h
 +++ b/include/openssl/ssl.h
 @@ -1767,6 +1767,12 @@ OPENSSL_EXPORT int SSL_CTX_set_strict_cipher_list(SSL_CTX *ctx,
@@ -59,7 +59,7 @@ index 7f733ac93..b16ac6ff0 100644
  // SSL_set_permute_extensions configures whether sockets on |ssl| should
  // permute extensions. For now, this is only implemented for the ClientHello.
  OPENSSL_EXPORT void SSL_set_permute_extensions(SSL *ssl, int enabled);
-@@ -5191,6 +5203,22 @@ OPENSSL_EXPORT int SSL_CTX_set1_sigalgs_list(SSL_CTX *ctx, const char *str);
+@@ -5191,6 +5203,32 @@ OPENSSL_EXPORT int SSL_CTX_set1_sigalgs_list(SSL_CTX *ctx, const char *str);
  // more convenient to codesearch for specific algorithm values.
  OPENSSL_EXPORT int SSL_set1_sigalgs_list(SSL *ssl, const char *str);
  
@@ -78,11 +78,21 @@ index 7f733ac93..b16ac6ff0 100644
 +// send record size limit extension.
 +OPENSSL_EXPORT void SSL_CTX_set_record_size_limit(SSL_CTX *ctx, uint16_t limit);
 +
++// curl-imperonsate:
++// SSL_set_key_shares_limit configures whether sockets on |ssl| should
++// send three key shares.
++OPENSSL_EXPORT void SSL_set_key_shares_limit(SSL *ssl, uint8_t limit);
++
++// curl-impersonate:
++// SSL_CTX_set_key_shares_limit configures whether sockets on |ctx| should
++// send three key shares.
++OPENSSL_EXPORT void SSL_CTX_set_key_shares_limit(SSL_CTX *ctx, uint8_t limit);
++
 +
  #define SSL_set_app_data(s, arg) (SSL_set_ex_data(s, 0, (char *)(arg)))
  #define SSL_get_app_data(s) (SSL_get_ex_data(s, 0))
  #define SSL_SESSION_set_app_data(s, a) \
-@@ -5570,6 +5598,8 @@ OPENSSL_EXPORT int SSL_CTX_set_tlsext_status_arg(SSL_CTX *ctx, void *arg);
+@@ -5570,6 +5608,8 @@ OPENSSL_EXPORT int SSL_CTX_set_tlsext_status_arg(SSL_CTX *ctx, void *arg);
  #define SSL_CURVE_SECP521R1 SSL_GROUP_SECP521R1
  #define SSL_CURVE_X25519 SSL_GROUP_X25519
  #define SSL_CURVE_X25519_KYBER768_DRAFT00 SSL_GROUP_X25519_KYBER768_DRAFT00
@@ -114,10 +124,71 @@ index 60301885a..4440c3bcb 100644
  #define TLSEXT_MAXLEN_host_name 255
  
 diff --git a/ssl/extensions.cc b/ssl/extensions.cc
-index c9424c98b..03c1525ab 100644
+index c9424c98b..3fc874690 100644
 --- a/ssl/extensions.cc
 +++ b/ssl/extensions.cc
-@@ -2793,6 +2793,27 @@ static bool ext_quic_transport_params_add_serverhello_legacy(SSL_HANDSHAKE *hs,
+@@ -2219,7 +2219,15 @@ bool ssl_setup_key_shares(SSL_HANDSHAKE *hs, uint16_t override_group_id) {
+   SSL *const ssl = hs->ssl;
+   hs->key_shares[0].reset();
+   hs->key_shares[1].reset();
++  hs->key_shares[2].reset();
+   hs->key_share_bytes.Reset();
++  // If key_shares_limit is set, use it. Otherwise, use the default of 2.
++  const uint8_t key_shares_limit = hs->ssl->config->key_shares_limit;
++  // The key_shares_limit is set by the user, so it is a custom value.
++  const bool is_custom = key_shares_limit != 0;
++  const uint8_t limit = (key_shares_limit >= 1 && key_shares_limit <= 3) ? key_shares_limit : 2;
++  const bool enable_second_key_share = (limit >= 2);
++  const bool enable_three_key_shares = (limit >= 3);
+ 
+   if (hs->max_version < TLS1_3_VERSION) {
+     return true;
+@@ -2241,6 +2249,7 @@ bool ssl_setup_key_shares(SSL_HANDSHAKE *hs, uint16_t override_group_id) {
+ 
+   uint16_t group_id = override_group_id;
+   uint16_t second_group_id = 0;
++  uint16_t third_group_id = 0;
+   if (override_group_id == 0) {
+     // Predict the most preferred group.
+     Span<const uint16_t> groups = tls1_get_grouplist(hs);
+@@ -2250,13 +2259,14 @@ bool ssl_setup_key_shares(SSL_HANDSHAKE *hs, uint16_t override_group_id) {
+     }
+ 
+     group_id = groups[0];
+-
+-    // We'll try to include one post-quantum and one classical initial key
+-    // share.
+-    for (size_t i = 1; i < groups.size() && second_group_id == 0; i++) {
+-      if (is_post_quantum_group(group_id) != is_post_quantum_group(groups[i])) {
++    // Include one post-quantum and one classical initial key share.
++    for (size_t i = 1; i < groups.size(); i++) {
++      if (enable_second_key_share && second_group_id == 0 && (is_custom || (is_post_quantum_group(group_id) != is_post_quantum_group(groups[i])))) {
+         second_group_id = groups[i];
+         assert(second_group_id != group_id);
++      } else if (enable_three_key_shares && third_group_id == 0 && 
++                 (is_custom || is_post_quantum_group(group_id) != is_post_quantum_group(groups[i]))) {
++        third_group_id = groups[i];
+       }
+     }
+   }
+@@ -2280,6 +2290,16 @@ bool ssl_setup_key_shares(SSL_HANDSHAKE *hs, uint16_t override_group_id) {
+     }
+   }
+ 
++  if (third_group_id != 0) {
++    hs->key_shares[2] = SSLKeyShare::Create(third_group_id);
++    if (!hs->key_shares[2] ||  //
++        !CBB_add_u16(cbb.get(), third_group_id) ||
++        !CBB_add_u16_length_prefixed(cbb.get(), &key_exchange) ||
++        !hs->key_shares[2]->Generate(&key_exchange)) {
++      return false;
++    }
++  }
++
+   return CBBFinishArray(cbb.get(), &hs->key_share_bytes);
+ }
+ 
+@@ -2793,6 +2813,27 @@ static bool ext_quic_transport_params_add_serverhello_legacy(SSL_HANDSHAKE *hs,
  static bool ext_delegated_credential_add_clienthello(
      const SSL_HANDSHAKE *hs, CBB *out, CBB *out_compressible,
      ssl_client_hello_type_t type) {
@@ -145,7 +216,7 @@ index c9424c98b..03c1525ab 100644
    return true;
  }
  
-@@ -3143,6 +3164,40 @@ bool ssl_negotiate_alps(SSL_HANDSHAKE *hs, uint8_t *out_alert,
+@@ -3143,6 +3184,40 @@ bool ssl_negotiate_alps(SSL_HANDSHAKE *hs, uint8_t *out_alert,
    return true;
  }
  
@@ -186,7 +257,7 @@ index c9424c98b..03c1525ab 100644
  // kExtensions contains all the supported extensions.
  static const struct tls_extension kExtensions[] = {
    {
-@@ -3316,6 +3371,13 @@ static const struct tls_extension kExtensions[] = {
+@@ -3316,6 +3391,13 @@ static const struct tls_extension kExtensions[] = {
      ignore_parse_clienthello,
      ext_alps_add_serverhello,
    },
@@ -200,7 +271,7 @@ index c9424c98b..03c1525ab 100644
    {
      TLSEXT_TYPE_application_settings_old,
      ext_alps_add_clienthello_old,
-@@ -3355,6 +3417,7 @@ bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
+@@ -3355,6 +3437,7 @@ bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
        !permutation.Init(kNumExtensions)) {
      return false;
    }
@@ -208,7 +279,7 @@ index c9424c98b..03c1525ab 100644
    for (size_t i = 0; i < kNumExtensions; i++) {
      permutation[i] = i;
    }
-@@ -3362,6 +3425,11 @@ bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
+@@ -3362,6 +3445,11 @@ bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
      // Set element |i| to a randomly-selected element 0 <= j <= i.
      std::swap(permutation[i], permutation[seeds[i - 1] % (i + 1)]);
    }
@@ -220,7 +291,7 @@ index c9424c98b..03c1525ab 100644
    hs->extension_permutation = std::move(permutation);
    return true;
  }
-@@ -3379,6 +3447,50 @@ static const struct tls_extension *tls_extension_find(uint32_t *out_index,
+@@ -3379,6 +3467,50 @@ static const struct tls_extension *tls_extension_find(uint32_t *out_index,
    return NULL;
  }
  
@@ -271,7 +342,7 @@ index c9424c98b..03c1525ab 100644
  static bool add_padding_extension(CBB *cbb, uint16_t ext, size_t len) {
    CBB child;
    if (!CBB_add_u16(cbb, ext) ||  //
-@@ -3425,6 +3537,9 @@ static bool ssl_add_clienthello_tlsext_inner(SSL_HANDSHAKE *hs, CBB *out,
+@@ -3425,6 +3557,9 @@ static bool ssl_add_clienthello_tlsext_inner(SSL_HANDSHAKE *hs, CBB *out,
      size_t i = hs->extension_permutation.empty()
                     ? unpermuted
                     : hs->extension_permutation[unpermuted];
@@ -281,7 +352,7 @@ index c9424c98b..03c1525ab 100644
      const size_t len_before = CBB_len(&extensions);
      const size_t len_compressed_before = CBB_len(compressed.get());
      if (!kExtensions[i].add_clienthello(hs, &extensions, compressed.get(),
-@@ -3534,6 +3649,7 @@ bool ssl_add_clienthello_tlsext(SSL_HANDSHAKE *hs, CBB *out, CBB *out_encoded,
+@@ -3534,6 +3669,7 @@ bool ssl_add_clienthello_tlsext(SSL_HANDSHAKE *hs, CBB *out, CBB *out_encoded,
      size_t i = hs->extension_permutation.empty()
                     ? unpermuted
                     : hs->extension_permutation[unpermuted];
@@ -455,7 +526,7 @@ index f87e00002..daa805266 100644
        hs->new_cipher->algorithm_mac != SSL_AEAD) {
      return false;
 diff --git a/ssl/internal.h b/ssl/internal.h
-index 092b2987e..1dadebc95 100644
+index 092b2987e..db393bd66 100644
 --- a/ssl/internal.h
 +++ b/ssl/internal.h
 @@ -807,9 +807,14 @@ BSSL_NAMESPACE_BEGIN
@@ -474,6 +545,15 @@ index 092b2987e..1dadebc95 100644
  
  // Bits for |algorithm_prf| (handshake digest).
  #define SSL_HANDSHAKE_MAC_DEFAULT 0x1
+@@ -2191,7 +2196,7 @@ struct SSL_HANDSHAKE {
+   // key_shares are the current key exchange instances. The second is only used
+   // as a client if we believe that we should offer two key shares in a
+   // ClientHello.
+-  UniquePtr<SSLKeyShare> key_shares[2];
++  UniquePtr<SSLKeyShare> key_shares[3];
+ 
+   // transcript is the current handshake transcript.
+   SSLTranscript transcript;
 @@ -2514,6 +2519,12 @@ bssl::UniquePtr<SSL_SESSION> tls13_create_session_with_ticket(SSL *ssl,
  // for |hs|, if applicable. It returns true on success and false on error.
  bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs);
@@ -511,17 +591,20 @@ index 092b2987e..1dadebc95 100644
    // srtp_profiles is the list of configured SRTP protection profiles for
    // DTLS-SRTP.
    UniquePtr<STACK_OF(SRTP_PROTECTION_PROFILE)> srtp_profiles;
-@@ -3505,6 +3526,9 @@ struct SSL_CONFIG {
+@@ -3505,6 +3526,12 @@ struct SSL_CONFIG {
    // hardware support, and use the value in aes_hw_override_value instead.
    bool aes_hw_override : 1;
  
 +  // curl-impersonate: record_size_limit is whether to send record size limit extension.
 +  uint16_t record_size_limit = 0;
 +
++  // curl-impersonate: key_shares_limit is the maximum number of key shares to send.
++  uint8_t key_shares_limit = 0;
++
    // aes_hw_override_value is used for testing to indicate the support or lack
    // of support for AES hw. The value is only considered if |aes_hw_override| is
    // true.
-@@ -3856,6 +3880,12 @@ struct ssl_ctx_st : public bssl::RefCounted<ssl_ctx_st> {
+@@ -3856,6 +3883,12 @@ struct ssl_ctx_st : public bssl::RefCounted<ssl_ctx_st> {
  
    bssl::UniquePtr<bssl::SSLCipherPreferenceList> cipher_list;
  
@@ -534,7 +617,7 @@ index 092b2987e..1dadebc95 100644
    X509_STORE *cert_store = nullptr;
    LHASH_OF(SSL_SESSION) *sessions = nullptr;
    // Most session-ids that will be cached, default is
-@@ -4080,6 +4110,10 @@ struct ssl_ctx_st : public bssl::RefCounted<ssl_ctx_st> {
+@@ -4080,6 +4113,10 @@ struct ssl_ctx_st : public bssl::RefCounted<ssl_ctx_st> {
    // accepted from the peer in decreasing order of preference.
    bssl::Array<uint16_t> verify_sigalgs;
  
@@ -545,12 +628,15 @@ index 092b2987e..1dadebc95 100644
    // retain_only_sha256_of_client_certs is true if we should compute the SHA256
    // hash of the peer's certificate and then discard it to save memory and
    // session space. Only effective on the server side.
-@@ -4132,6 +4166,9 @@ struct ssl_ctx_st : public bssl::RefCounted<ssl_ctx_st> {
+@@ -4132,6 +4169,12 @@ struct ssl_ctx_st : public bssl::RefCounted<ssl_ctx_st> {
    // |aes_hw_override| is true.
    bool aes_hw_override_value : 1;
  
-+  // record_size_limit is whether to send record size limit extension.
++  // curl-impersonate: record_size_limit is whether to send record size limit extension.
 +  uint16_t record_size_limit = 0;
++
++  // curl-impersonate: key_shares limit is the maximum number of key shares to send.
++  uint8_t key_shares_limit = 0;
 +
   private:
    friend RefCounted;
@@ -800,10 +886,20 @@ index 88144b060..96c78dc35 100644
  
  }  // namespace
 diff --git a/ssl/ssl_lib.cc b/ssl/ssl_lib.cc
-index f0b3872e9..bd6f869e6 100644
+index f0b3872e9..272bc9168 100644
 --- a/ssl/ssl_lib.cc
 +++ b/ssl/ssl_lib.cc
-@@ -658,6 +658,8 @@ SSL *SSL_new(SSL_CTX *ctx) {
+@@ -539,7 +539,8 @@ ssl_ctx_st::ssl_ctx_st(const SSL_METHOD *ssl_method)
+       handoff(false),
+       enable_early_data(false),
+       aes_hw_override(false),
+-      aes_hw_override_value(false) {
++      aes_hw_override_value(false),
++      key_shares_limit(0) {
+   CRYPTO_MUTEX_init(&lock);
+   CRYPTO_new_ex_data(&ex_data);
+ }
+@@ -658,14 +659,18 @@ SSL *SSL_new(SSL_CTX *ctx) {
    ssl->config->retain_only_sha256_of_client_certs =
        ctx->retain_only_sha256_of_client_certs;
    ssl->config->permute_extensions = ctx->permute_extensions;
@@ -812,7 +908,8 @@ index f0b3872e9..bd6f869e6 100644
    ssl->config->aes_hw_override = ctx->aes_hw_override;
    ssl->config->aes_hw_override_value = ctx->aes_hw_override_value;
    ssl->config->tls13_cipher_policy = ctx->tls13_cipher_policy;
-@@ -665,7 +667,8 @@ SSL *SSL_new(SSL_CTX *ctx) {
++  ssl->config->key_shares_limit = ctx->key_shares_limit;
+ 
    if (!ssl->config->supported_group_list.CopyFrom(ctx->supported_group_list) ||
        !ssl->config->alpn_client_proto_list.CopyFrom(
            ctx->alpn_client_proto_list) ||
@@ -822,7 +919,7 @@ index f0b3872e9..bd6f869e6 100644
      return nullptr;
    }
  
-@@ -685,6 +688,7 @@ SSL *SSL_new(SSL_CTX *ctx) {
+@@ -685,6 +690,7 @@ SSL *SSL_new(SSL_CTX *ctx) {
    ssl->config->signed_cert_timestamps_enabled =
        ctx->signed_cert_timestamps_enabled;
    ssl->config->ocsp_stapling_enabled = ctx->ocsp_stapling_enabled;
@@ -830,7 +927,15 @@ index f0b3872e9..bd6f869e6 100644
    ssl->config->handoff = ctx->handoff;
    ssl->quic_method = ctx->quic_method;
  
-@@ -2215,6 +2219,17 @@ void SSL_enable_ocsp_stapling(SSL *ssl) {
+@@ -709,6 +715,7 @@ SSL_CONFIG::SSL_CONFIG(SSL *ssl_arg)
+       jdk11_workaround(false),
+       quic_use_legacy_codepoint(false),
+       permute_extensions(false),
++      key_shares_limit(0),
+       alps_use_new_codepoint(false),
+       check_client_certificate_type(true),
+       check_ecdsa_curve(true) {
+@@ -2215,6 +2222,28 @@ void SSL_enable_ocsp_stapling(SSL *ssl) {
    ssl->config->ocsp_stapling_enabled = true;
  }
  
@@ -845,10 +950,21 @@ index f0b3872e9..bd6f869e6 100644
 +  ctx->record_size_limit = limit;
 +}
 +
++void SSL_set_key_shares_limit(SSL *ssl, uint8_t limit) {
++  if (!ssl->config) {
++    return;
++  }
++  ssl->config->key_shares_limit = limit;
++}
++
++void SSL_CTX_set_key_shares_limit(SSL_CTX *ctx, uint8_t limit) {
++  ctx->key_shares_limit = limit;
++}
++
  void SSL_get0_signed_cert_timestamp_list(const SSL *ssl, const uint8_t **out,
                                           size_t *out_len) {
    SSL_SESSION *session = SSL_get_session(ssl);
-@@ -3029,6 +3044,17 @@ void SSL_CTX_set_permute_extensions(SSL_CTX *ctx, int enabled) {
+@@ -3029,6 +3058,17 @@ void SSL_CTX_set_permute_extensions(SSL_CTX *ctx, int enabled) {
    ctx->permute_extensions = !!enabled;
  }
  
