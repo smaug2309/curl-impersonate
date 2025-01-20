@@ -134,7 +134,7 @@ signature:
       - 1
       - 2
       - 3
-      length: 3
+      length: 7
       type: compress_certificate
     - length: 0
       type: encrypted_client_hello
