@@ -124,7 +124,7 @@ index 60301885a..4440c3bcb 100644
  #define TLSEXT_MAXLEN_host_name 255
  
 diff --git a/ssl/extensions.cc b/ssl/extensions.cc
-index c9424c98b..3fc874690 100644
+index c9424c98b..ea76ca366 100644
 --- a/ssl/extensions.cc
 +++ b/ssl/extensions.cc
 @@ -2219,7 +2219,15 @@ bool ssl_setup_key_shares(SSL_HANDSHAKE *hs, uint16_t override_group_id) {
@@ -188,7 +188,44 @@ index c9424c98b..3fc874690 100644
    return CBBFinishArray(cbb.get(), &hs->key_share_bytes);
  }
  
-@@ -2793,6 +2813,27 @@ static bool ext_quic_transport_params_add_serverhello_legacy(SSL_HANDSHAKE *hs,
+@@ -2318,13 +2338,20 @@ bool ssl_ext_key_share_parse_serverhello(SSL_HANDSHAKE *hs,
+   }
+ 
+   SSLKeyShare *key_share = hs->key_shares[0].get();
++  // group_id is the server chosen group_id, and if key_share[0] is not chosen
+   if (key_share->GroupID() != group_id) {
++    // the server also did not choose the second one
+     if (!hs->key_shares[1] || hs->key_shares[1]->GroupID() != group_id) {
+-      *out_alert = SSL_AD_ILLEGAL_PARAMETER;
+-      OPENSSL_PUT_ERROR(SSL, SSL_R_WRONG_CURVE);
+-      return false;
++      // the server also did not choose the third one, we are out of options
++      if (!hs->key_shares[2] || hs->key_shares[2]->GroupID() != group_id) {
++        *out_alert = SSL_AD_ILLEGAL_PARAMETER;
++        OPENSSL_PUT_ERROR(SSL, SSL_R_WRONG_CURVE);
++        return false;
++      }
++      key_share = hs->key_shares[2].get();  // choose the third one
++    } else {
++      key_share = hs->key_shares[1].get();  // choose the second one
+     }
+-    key_share = hs->key_shares[1].get();
+   }
+ 
+   if (!key_share->Decap(out_secret, out_alert, ciphertext)) {
+@@ -2332,9 +2359,11 @@ bool ssl_ext_key_share_parse_serverhello(SSL_HANDSHAKE *hs,
+     return false;
+   }
+ 
++  // choose the first one
+   hs->new_session->group_id = group_id;
+   hs->key_shares[0].reset();
+   hs->key_shares[1].reset();
++  hs->key_shares[2].reset();
+   return true;
+ }
+ 
+@@ -2793,6 +2822,27 @@ static bool ext_quic_transport_params_add_serverhello_legacy(SSL_HANDSHAKE *hs,
  static bool ext_delegated_credential_add_clienthello(
      const SSL_HANDSHAKE *hs, CBB *out, CBB *out_compressible,
      ssl_client_hello_type_t type) {
@@ -216,7 +253,7 @@ index c9424c98b..3fc874690 100644
    return true;
  }
  
-@@ -3143,6 +3184,40 @@ bool ssl_negotiate_alps(SSL_HANDSHAKE *hs, uint8_t *out_alert,
+@@ -3143,6 +3193,40 @@ bool ssl_negotiate_alps(SSL_HANDSHAKE *hs, uint8_t *out_alert,
    return true;
  }
  
@@ -257,7 +294,7 @@ index c9424c98b..3fc874690 100644
  // kExtensions contains all the supported extensions.
  static const struct tls_extension kExtensions[] = {
    {
-@@ -3316,6 +3391,13 @@ static const struct tls_extension kExtensions[] = {
+@@ -3316,6 +3400,13 @@ static const struct tls_extension kExtensions[] = {
      ignore_parse_clienthello,
      ext_alps_add_serverhello,
    },
@@ -271,7 +308,7 @@ index c9424c98b..3fc874690 100644
    {
      TLSEXT_TYPE_application_settings_old,
      ext_alps_add_clienthello_old,
-@@ -3355,6 +3437,7 @@ bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
+@@ -3355,6 +3446,7 @@ bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
        !permutation.Init(kNumExtensions)) {
      return false;
    }
@@ -279,7 +316,7 @@ index c9424c98b..3fc874690 100644
    for (size_t i = 0; i < kNumExtensions; i++) {
      permutation[i] = i;
    }
-@@ -3362,6 +3445,11 @@ bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
+@@ -3362,6 +3454,11 @@ bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs) {
      // Set element |i| to a randomly-selected element 0 <= j <= i.
      std::swap(permutation[i], permutation[seeds[i - 1] % (i + 1)]);
    }
@@ -291,7 +328,7 @@ index c9424c98b..3fc874690 100644
    hs->extension_permutation = std::move(permutation);
    return true;
  }
-@@ -3379,6 +3467,50 @@ static const struct tls_extension *tls_extension_find(uint32_t *out_index,
+@@ -3379,6 +3476,50 @@ static const struct tls_extension *tls_extension_find(uint32_t *out_index,
    return NULL;
  }
  
@@ -342,7 +379,7 @@ index c9424c98b..3fc874690 100644
  static bool add_padding_extension(CBB *cbb, uint16_t ext, size_t len) {
    CBB child;
    if (!CBB_add_u16(cbb, ext) ||  //
-@@ -3425,6 +3557,9 @@ static bool ssl_add_clienthello_tlsext_inner(SSL_HANDSHAKE *hs, CBB *out,
+@@ -3425,6 +3566,9 @@ static bool ssl_add_clienthello_tlsext_inner(SSL_HANDSHAKE *hs, CBB *out,
      size_t i = hs->extension_permutation.empty()
                     ? unpermuted
                     : hs->extension_permutation[unpermuted];
@@ -352,7 +389,7 @@ index c9424c98b..3fc874690 100644
      const size_t len_before = CBB_len(&extensions);
      const size_t len_compressed_before = CBB_len(compressed.get());
      if (!kExtensions[i].add_clienthello(hs, &extensions, compressed.get(),
-@@ -3534,6 +3669,7 @@ bool ssl_add_clienthello_tlsext(SSL_HANDSHAKE *hs, CBB *out, CBB *out_encoded,
+@@ -3534,6 +3678,7 @@ bool ssl_add_clienthello_tlsext(SSL_HANDSHAKE *hs, CBB *out, CBB *out_encoded,
      size_t i = hs->extension_permutation.empty()
                     ? unpermuted
                     : hs->extension_permutation[unpermuted];
