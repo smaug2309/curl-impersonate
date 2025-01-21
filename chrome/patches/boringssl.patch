@@ -534,7 +534,7 @@ index df914c806..5652c5efc 100644
      if (!kExtensions[i].add_clienthello(hs, &extensions, &extensions, type)) {
        OPENSSL_PUT_ERROR(SSL, SSL_R_ERROR_ADDING_EXTENSION);
 diff --git a/ssl/handshake_client.cc b/ssl/handshake_client.cc
-index 3f8040b63..6927119f3 100644
+index 3f8040b63..4f8f34e88 100644
 --- a/ssl/handshake_client.cc
 +++ b/ssl/handshake_client.cc
 @@ -21,6 +21,8 @@
@@ -670,7 +670,7 @@ index 3f8040b63..6927119f3 100644
 +
 +    dh->p = BN_bin2bn(hs->dh_p.data(), hs->dh_p.size(), nullptr);
 +    dh->g = BN_bin2bn(hs->dh_g.data(), hs->dh_g.size(), nullptr);
-+    if (dh->p != nullptr && dh->g != nullptr) {
++    if (dh->p == nullptr || dh->g == nullptr) {
 +      DH_free(dh);
 +      return ssl_hs_error;
 +    }
@@ -706,7 +706,7 @@ index 3f8040b63..6927119f3 100644
 +    BIGNUM *peer_point = BN_bin2bn(hs->peer_key.data(), hs->peer_key.size(), nullptr);
 +    if (peer_point == nullptr || 
 +        !pms.InitForOverwrite(DH_size(dh)) || 
-+        (secret_len = DH_compute_key(pms.data(), peer_point, dh) <= 0)) {
++        (secret_len = DH_compute_key(pms.data(), peer_point, dh)) <= 0) {
 +      BN_free(peer_point);
 +      DH_free(dh);
 +      ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
